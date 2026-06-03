@@ -1,0 +1,16 @@
+{
+  "name": "comic-auto-trigger",
+  "version": "1.0.0",
+  "description": "条漫自动生成触发器 - 配合 Coze 工作流，手机一键触发生成，自动推送到微信",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js",
+    "dev": "node api/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,33 @@
+name: 每日18点触发生成条漫
+
+on:
+  schedule:
+    # 每天 18:00 北京时间 (UTC+8) → UTC 10:00
+    - cron: "0 10 * * *"
+  # 也支持手动触发（方便测试）
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 调用 Coze API 生成条漫
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.coze.cn/v1/workflow/run" \
+            -H "Authorization: Bearer ${{ secrets.COZE_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "workflow_id": "${{ secrets.COZE_WORKFLOW_ID }}",
+              "parameters": {},
+              "is_async": true
+            }')
+
+          echo "Coze 返回: $RESPONSE"
+
+          CODE=$(echo "$RESPONSE" | grep -o '"code":[0-9]*' | head -1 | cut -d: -f2)
+          if [ "$CODE" != "0" ]; then
+            echo "❌ Coze API 调用失败"
+            exit 1
+          fi
+
+          echo "✅ 工作流已触发，条漫生成中..."
