@@ -17,7 +17,7 @@ jobs:
           RESPONSE=$(curl -s -X POST "https://api.coze.cn/v1/workflow/run" \
             -H "Authorization: Bearer ${{ secrets.COZE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{"workflow_id":"${{ secrets.COZE_WORKFLOW_ID }}","parameters":{},"is_async":true}')
+            -d '{"workflow_id":"${{ secrets.COZE_WORKFLOW_ID }}","parameters":{"ref_image":"https://raw.githubusercontent.com/SMOYI-cell/aaa/main/images/ref_image.png"},"is_async":true}')
 
           echo "触发响应: $RESPONSE"
 
@@ -48,16 +48,20 @@ jobs:
               echo "✅ 工作流执行完成!"
 
               # ====== Step 3: 提取输出图片 ======
+              # 获取外层 output → 解析 JSON → 提取 Output(大写O) → 解析 JSON → 拿 output1~4
               RAW_OUTPUT=$(echo "$STATUS_RESP" | jq -r '.data | if type == "array" then .[0].output else .output end')
-              echo "原始输出: $RAW_OUTPUT"
+              echo "外层输出: ${RAW_OUTPUT:0:200}..."
 
-              # output 可能是 JSON 字符串，尝试二次解析
-              PARSED=$(echo "$RAW_OUTPUT" | jq 'if type == "string" then fromjson else . end' 2>/dev/null || echo "$RAW_OUTPUT")
+              # 解析外层 JSON，提取 Output 字段
+              OUTER_JSON=$(echo "$RAW_OUTPUT" | jq 'if type == "string" then fromjson else . end')
+              INNER=$(echo "$OUTER_JSON" | jq -r '.Output // .output // ""')
 
-              IMG1=$(echo "$PARSED" | jq -r '.output1 // ""')
-              IMG2=$(echo "$PARSED" | jq -r '.output2 // ""')
-              IMG3=$(echo "$PARSED" | jq -r '.output3 // ""')
-              IMG4=$(echo "$PARSED" | jq -r '.output4 // ""')
+              # 解析内层 JSON，提取 output1~4
+              IMGS_JSON=$(echo "$INNER" | jq 'if type == "string" then fromjson else . end')
+              IMG1=$(echo "$IMGS_JSON" | jq -r '.output1 // ""')
+              IMG2=$(echo "$IMGS_JSON" | jq -r '.output2 // ""')
+              IMG3=$(echo "$IMGS_JSON" | jq -r '.output3 // ""')
+              IMG4=$(echo "$IMGS_JSON" | jq -r '.output4 // ""')
 
               NOW=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M')
 
@@ -76,7 +80,7 @@ jobs:
               exit 0
             fi
 
-            if [ "$STATUS" = "Failed" ]; then
+            if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Fail" ]; then
               ERROR_MSG=$(echo "$STATUS_RESP" | jq -r '.data | if type == "array" then .[0].error_message // "未知错误" else .error_message // "未知错误" end')
               echo "❌ 工作流执行失败: $ERROR_MSG"
               exit 1
