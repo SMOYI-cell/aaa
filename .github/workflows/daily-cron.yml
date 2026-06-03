@@ -17,11 +17,7 @@ jobs:
           RESPONSE=$(curl -s -X POST "https://api.coze.cn/v1/workflow/run" \
             -H "Authorization: Bearer ${{ secrets.COZE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
-            -d '{
-              "workflow_id": "${{ secrets.COZE_WORKFLOW_ID }}",
-              "parameters": {},
-              "is_async": true
-            }')
+            -d '{"workflow_id":"${{ secrets.COZE_WORKFLOW_ID }}","parameters":{},"is_async":true}')
 
           echo "触发响应: $RESPONSE"
 
@@ -35,7 +31,7 @@ jobs:
           echo "✅ 工作流已触发, execute_id=$EXECUTE_ID"
 
           # ====== Step 2: 轮询等待完成 ======
-          MAX_ATTEMPTS=30   # 最多等 5 分钟（30 × 10s）
+          MAX_ATTEMPTS=30
           ATTEMPT=0
 
           while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
@@ -45,36 +41,35 @@ jobs:
             STATUS_RESP=$(curl -s "https://api.coze.cn/v1/workflows/${{ secrets.COZE_WORKFLOW_ID }}/run_histories/$EXECUTE_ID" \
               -H "Authorization: Bearer ${{ secrets.COZE_API_TOKEN }}")
 
-            STATUS=$(echo "$STATUS_RESP" | jq -r '.data.execute_status')
+            STATUS=$(echo "$STATUS_RESP" | jq -r '.data.execute_status // .data[0].execute_status')
             echo "[$ATTEMPT/$MAX_ATTEMPTS] 状态: $STATUS"
 
             if [ "$STATUS" = "Success" ]; then
               echo "✅ 工作流执行完成!"
 
               # ====== Step 3: 提取输出图片 ======
-              RAW_OUTPUT=$(echo "$STATUS_RESP" | jq -r '.data.output')
+              RAW_OUTPUT=$(echo "$STATUS_RESP" | jq -r '.data.output // .data[0].output')
               echo "原始输出: $RAW_OUTPUT"
 
               # output 可能是 JSON 字符串，尝试二次解析
-              OUTPUT=$(echo "$RAW_OUTPUT" | jq 'if type == "string" then fromjson else . end' 2>/dev/null || echo "$RAW_OUTPUT")
+              PARSED=$(echo "$RAW_OUTPUT" | jq 'if type == "string" then fromjson else . end' 2>/dev/null || echo "$RAW_OUTPUT")
 
-              IMG1=$(echo "$OUTPUT" | jq -r '.output1 // ""')
-              IMG2=$(echo "$OUTPUT" | jq -r '.output2 // ""')
-              IMG3=$(echo "$OUTPUT" | jq -r '.output3 // ""')
-              IMG4=$(echo "$OUTPUT" | jq -r '.output4 // ""')
+              IMG1=$(echo "$PARSED" | jq -r '.output1 // ""')
+              IMG2=$(echo "$PARSED" | jq -r '.output2 // ""')
+              IMG3=$(echo "$PARSED" | jq -r '.output3 // ""')
+              IMG4=$(echo "$PARSED" | jq -r '.output4 // ""')
 
               NOW=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M')
 
               # ====== Step 4: 推送 Server酱 → 微信 ======
+              PUSH_JSON=$(jq -n \
+                --arg title "📱 今日条漫已生成" \
+                --arg desp "## 🎨 今日条漫\n\n![第1格](${IMG1})\n![第2格](${IMG2})\n![第3格](${IMG3})\n![第4格](${IMG4})\n\n> 🕐 生成时间：${NOW}\n\n✅ 满意 → 去小红书发帖\n🔄 不满意 → 手机网页点「重新生成」" \
+                '{title: $title, desp: $desp}')
+
               PUSH_RESP=$(curl -s -X POST "https://sctapi.ftqq.com/${{ secrets.SERVER_SENDKEY }}.send" \
                 -H "Content-Type: application/json" \
-                -d "$(cat <<EOF
-              {
-                "title": "📱 今日条漫已生成",
-                "desp": "## 🎨 今日条漫\n\n![第1格](${IMG1})\n![第2格](${IMG2})\n![第3格](${IMG3})\n![第4格](${IMG4})\n\n> 🕐 生成时间：${NOW}\n\n✅ 满意 → 去小红书发帖\n🔄 不满意 → 手机网页点「重新生成」"
-              }
-              EOF
-              )")
+                -d "$PUSH_JSON")
 
               echo "推送结果: $PUSH_RESP"
               echo "✅ 完成！微信应该已收到推送"
@@ -82,7 +77,7 @@ jobs:
             fi
 
             if [ "$STATUS" = "Failed" ]; then
-              ERROR_MSG=$(echo "$STATUS_RESP" | jq -r '.data.error_message // "未知错误"')
+              ERROR_MSG=$(echo "$STATUS_RESP" | jq -r '.data.error_message // .data[0].error_message // "未知错误"')
               echo "❌ 工作流执行失败: $ERROR_MSG"
               exit 1
             fi
