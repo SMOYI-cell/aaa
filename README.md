@@ -2,7 +2,7 @@
 
 配合你已有的 **Coze 条漫工作流**，实现：
 
-- ⏰ **每天 18:00** GitHub Actions 自动触发 → 推送到微信（Server酱）
+- ⏰ **每天 9:00** GitHub Actions 自动触发 → 推送到微信（Server酱）
 - 📱 **不满意？** 手机打开网页点一下按钮 → 重新生成 → 推送到微信
 - 💰 **零成本**：Coze 免费 + Vercel 免费 + Server酱 免费
 
@@ -13,7 +13,7 @@
 ```
          ┌───────────────────────────┐
          │    GitHub Actions          │
-         │    每天 18:00 (UTC+8)     │
+         │    每天 9:00 (UTC+8)      │
          │    调用 Coze API           │
          └────────────┬──────────────┘
                       │
@@ -102,7 +102,7 @@
 
 ## 第二步：设置 GitHub Actions 定时触发（代替 Coze 定时器）
 
-GitHub Actions 会在每天 18:00 自动调用 Coze API 触发你的工作流。
+GitHub Actions 会在每天 9:00 自动调用 Coze API 触发你的工作流。
 
 > 代码已经写好了，在 `.github/workflows/daily-cron.yml`，你只需要配置密钥：
 
@@ -114,7 +114,7 @@ GitHub Actions 会在每天 18:00 自动调用 Coze API 触发你的工作流。
 | `COZE_API_TOKEN` | `pat_nFstJegZQPzvYmzKxvVXkzFCPR1OtEsnPjcFuSixu0DpifxtGD352deOcSMlBB4q` |
 | `COZE_WORKFLOW_ID` | `7592162373667389483` |
 
-3. 点「**Actions**」标签 → 点「**每日18点触发生成条漫**」→ 点「**Run workflow**」手动测试一次
+3. 点「**Actions**」标签 → 点「**每日9点触发生成条漫**」→ 点「**Run workflow**」手动测试一次
 
 ---
 
@@ -183,10 +183,10 @@ git push -u origin main
 
 ### 4.2 测试定时自动生成
 
-1. 打开 GitHub 仓库 → **Actions** → 点「**每日18点触发生成条漫**」
+1. 打开 GitHub 仓库 → **Actions** → 点「**每日9点触发生成条漫**」
 2. 点「**Run workflow**」→ 绿色按钮手动执行
 3. 等 1 分钟左右，确认微信收到 Server酱 推送
-4. 如果正常，每天 18:00 GitHub Actions 会自动执行
+4. 如果正常，每天 9:00 GitHub Actions 会自动执行
 
 ---
 
@@ -194,7 +194,7 @@ git push -u origin main
 
 | 场景 | 操作 |
 |------|------|
-| **每天 18:00** | 微信收到推送 → 满意就去小红书发帖 |
+| **每天 9:00** | 微信收到推送 → 满意就去小红书发帖 |
 | **不满意** | 手机桌面点「条漫生成」App → 点「🔄 重新生成」→ 等新结果 |
 | **还想再换** | 再点一次「🔄 重新生成」 |
 | **查看之前的结果** | 页面下滑 → 历史记录 |

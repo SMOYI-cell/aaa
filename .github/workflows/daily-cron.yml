@@ -1,9 +1,9 @@
-name: 每日18点触发生成条漫
+name: 每日9点触发生成条漫
 
 on:
   schedule:
-    # 每天 18:00 北京时间 (UTC+8) → UTC 10:00
-    - cron: "0 10 * * *"
+    # 每天早上 9:00 北京时间 (UTC+8) → UTC 1:00
+    - cron: "0 1 * * *"
   # 也支持手动触发（方便测试）
   workflow_dispatch:
 
@@ -11,8 +11,9 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
-      - name: 调用 Coze API 生成条漫
+      - name: 触发 Coze 工作流 → 轮询结果 → 推送微信
         run: |
+          # ====== Step 1: 触发 Coze 工作流 ======
           RESPONSE=$(curl -s -X POST "https://api.coze.cn/v1/workflow/run" \
             -H "Authorization: Bearer ${{ secrets.COZE_API_TOKEN }}" \
             -H "Content-Type: application/json" \
@@ -22,12 +23,70 @@ jobs:
               "is_async": true
             }')
 
-          echo "Coze 返回: $RESPONSE"
+          echo "触发响应: $RESPONSE"
 
-          CODE=$(echo "$RESPONSE" | grep -o '"code":[0-9]*' | head -1 | cut -d: -f2)
-          if [ "$CODE" != "0" ]; then
-            echo "❌ Coze API 调用失败"
+          EXECUTE_ID=$(echo "$RESPONSE" | jq -r '.data.execute_id')
+          CODE=$(echo "$RESPONSE" | jq -r '.code')
+
+          if [ "$CODE" != "0" ] || [ -z "$EXECUTE_ID" ] || [ "$EXECUTE_ID" = "null" ]; then
+            echo "❌ Coze 触发失败"
             exit 1
           fi
+          echo "✅ 工作流已触发, execute_id=$EXECUTE_ID"
 
-          echo "✅ 工作流已触发，条漫生成中..."
+          # ====== Step 2: 轮询等待完成 ======
+          MAX_ATTEMPTS=30   # 最多等 5 分钟（30 × 10s）
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT + 1))
+            sleep 10
+
+            STATUS_RESP=$(curl -s "https://api.coze.cn/v1/workflows/${{ secrets.COZE_WORKFLOW_ID }}/run_histories/$EXECUTE_ID" \
+              -H "Authorization: Bearer ${{ secrets.COZE_API_TOKEN }}")
+
+            STATUS=$(echo "$STATUS_RESP" | jq -r '.data.execute_status')
+            echo "[$ATTEMPT/$MAX_ATTEMPTS] 状态: $STATUS"
+
+            if [ "$STATUS" = "Success" ]; then
+              echo "✅ 工作流执行完成!"
+
+              # ====== Step 3: 提取输出图片 ======
+              RAW_OUTPUT=$(echo "$STATUS_RESP" | jq -r '.data.output')
+              echo "原始输出: $RAW_OUTPUT"
+
+              # output 可能是 JSON 字符串，尝试二次解析
+              OUTPUT=$(echo "$RAW_OUTPUT" | jq 'if type == "string" then fromjson else . end' 2>/dev/null || echo "$RAW_OUTPUT")
+
+              IMG1=$(echo "$OUTPUT" | jq -r '.output1 // ""')
+              IMG2=$(echo "$OUTPUT" | jq -r '.output2 // ""')
+              IMG3=$(echo "$OUTPUT" | jq -r '.output3 // ""')
+              IMG4=$(echo "$OUTPUT" | jq -r '.output4 // ""')
+
+              NOW=$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M')
+
+              # ====== Step 4: 推送 Server酱 → 微信 ======
+              PUSH_RESP=$(curl -s -X POST "https://sctapi.ftqq.com/${{ secrets.SERVER_SENDKEY }}.send" \
+                -H "Content-Type: application/json" \
+                -d "$(cat <<EOF
+              {
+                "title": "📱 今日条漫已生成",
+                "desp": "## 🎨 今日条漫\n\n![第1格](${IMG1})\n![第2格](${IMG2})\n![第3格](${IMG3})\n![第4格](${IMG4})\n\n> 🕐 生成时间：${NOW}\n\n✅ 满意 → 去小红书发帖\n🔄 不满意 → 手机网页点「重新生成」"
+              }
+              EOF
+              )")
+
+              echo "推送结果: $PUSH_RESP"
+              echo "✅ 完成！微信应该已收到推送"
+              exit 0
+            fi
+
+            if [ "$STATUS" = "Failed" ]; then
+              ERROR_MSG=$(echo "$STATUS_RESP" | jq -r '.data.error_message // "未知错误"')
+              echo "❌ 工作流执行失败: $ERROR_MSG"
+              exit 1
+            fi
+          done
+
+          echo "⏰ 轮询超时（超过 5 分钟）"
+          exit 1
