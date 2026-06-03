@@ -68,7 +68,7 @@ jobs:
               # ====== Step 4: 推送 Server酱 → 微信 ======
               PUSH_JSON=$(jq -n \
                 --arg title "📱 今日条漫已生成" \
-                --arg desp "## 🎨 今日条漫\n\n![第1格](${IMG1})\n![第2格](${IMG2})\n![第3格](${IMG3})\n![第4格](${IMG4})\n\n> 🕐 生成时间：${NOW}\n\n✅ 满意 → 去小红书发帖\n🔄 不满意 → 手机网页点「重新生成」" \
+                --arg desp "## 🎨 今日条漫\n\n![第1格](${IMG1})\n![第2格](${IMG2})\n![第3格](${IMG3})\n![第4格](${IMG4})\n\n> 🕐 生成时间：${NOW}\n\n[🔄 不满意？重新生成](https://github.com/SMOYI-cell/aaa/actions/workflows/daily-cron.yml)\n\n[📕 去小红书发帖](https://www.xiaohongshu.com)" \
                 '{title: $title, desp: $desp}')
 
               PUSH_RESP=$(curl -s -X POST "https://sctapi.ftqq.com/${{ secrets.SERVER_SENDKEY }}.send" \
