@@ -24,7 +24,9 @@ async function triggerCozeWorkflow() {
     },
     body: JSON.stringify({
       workflow_id: COZE_WORKFLOW_ID,
-      parameters: {},         // 无输入参数
+      parameters: {
+        ref_image: "https://raw.githubusercontent.com/SMOYI-cell/aaa/main/images/ref_image.png"
+      },
       is_async: true,         // 异步模式，立即返回
     }),
   });
@@ -48,16 +50,30 @@ async function getCozeRunStatus(executeId) {
 }
 
 /** 从工作流输出中提取 4 张条漫图片 */
-function parseWorkflowOutput(data) {
-  let output = data.output;
+function parseWorkflowOutput(responseData) {
+  // data 可能是数组 [{output: "..."}] 或对象 {output: "..."}
+  let rawData = responseData.data;
+  if (Array.isArray(rawData)) rawData = rawData[0];
+  if (!rawData) return { images: [] };
+
+  let output = rawData.output;
   if (typeof output === "string") {
     try { output = JSON.parse(output); } catch { /* keep as-is */ }
   }
 
-  // output1 ~ output4 都是图片 URL（竖排条漫的 4 格）
+  // output 里可能有 Output(大写O) 字段，里面才是真正的 output1~4
+  let inner = output;
+  if (output && output.Output) {
+    if (typeof output.Output === "string") {
+      try { inner = JSON.parse(output.Output); } catch { inner = output; }
+    } else {
+      inner = output.Output;
+    }
+  }
+
   const images = [];
   for (let i = 1; i <= 4; i++) {
-    const url = output?.[`output${i}`] || output?.[`Output${i}`] || "";
+    const url = inner?.[`output${i}`] || inner?.[`Output${i}`] || "";
     if (url) images.push(url);
   }
 
@@ -432,19 +448,11 @@ function startPolling(executeId) {
 // 解析工作流输出（output1~4 都是图片 URL）
 // ============================================================
 function parseOutput(data) {
-  let output = data.output || data.data?.output || {};
-
-  if (typeof output === "string") {
-    try { output = JSON.parse(output); } catch(e) {}
+  // 服务端 /api/status 已预解析 images，直接用
+  if (data.images && data.images.length > 0) {
+    return { images: data.images };
   }
-
-  const images = [];
-  for (let i = 1; i <= 4; i++) {
-    const url = output?.["output" + i] || output?.["Output" + i] || "";
-    if (url) images.push(url);
-  }
-
-  return { images };
+  return { images: [] };
 }
 
 // ============================================================
@@ -592,6 +600,11 @@ function showToast(msg) {
 // 初始化
 // ============================================================
 renderHistory();
+
+// 如果是微信点过来的（?auto=1），自动触发重新生成
+if (window.location.search.includes('auto=1')) {
+  setTimeout(() => handleGenerate(), 500);
+}
 </script>
 </body>
 </html>`);
@@ -635,14 +648,24 @@ app.get("/api/status", async (req, res) => {
       return res.json({ status: "Failed", error: data.msg || "查询失败" });
     }
 
-    const history = data.data;
-    // execute_status: "running" | "Success" | "Failed"
-    const status = history?.execute_status || "unknown";
+    // data 可能是数组 [{...}] 或对象 {...}
+    let history = data.data;
+    if (Array.isArray(history)) history = history[0];
+    if (!history) return res.json({ status: "Failed", error: "无数据" });
+
+    const status = history.execute_status || "unknown";
+
+    // 解析嵌套的 output
+    let images = [];
+    if (status === "Success" && history.output) {
+      images = parseWorkflowOutput(data).images;
+    }
 
     res.json({
       status: status,
-      output: history?.output || null,
-      error: history?.error_message || null,
+      output: history.output || null,
+      images: images,
+      error: history.error_message || null,
     });
   } catch (err) {
     console.error("Status error:", err);
