@@ -25,7 +25,7 @@ jobs:
 
           echo "触发响应: $RESPONSE"
 
-          EXECUTE_ID=$(echo "$RESPONSE" | jq -r '.data.execute_id')
+          EXECUTE_ID=$(echo "$RESPONSE" | jq -r '.execute_id // .data.execute_id')
           CODE=$(echo "$RESPONSE" | jq -r '.code')
 
           if [ "$CODE" != "0" ] || [ -z "$EXECUTE_ID" ] || [ "$EXECUTE_ID" = "null" ]; then
